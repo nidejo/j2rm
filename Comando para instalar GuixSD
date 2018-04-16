@@ -1,0 +1,79 @@
+loadkeys la-latin1
+
+iwconf
+ifconfig enp2s0 up
+dhclient -v enp2s0
+
+cfdisk
+
+    sda1 --> /     --> Primary  --> 83 (15 GB)   
+    sda2 --> /home --> Primary  --> 83 (7 GB)     
+    sda3 --> J2RM  --> Primary  --> 83 (18 GB)   -->> ENCRIPTADO  
+    
+cryptsetup luksFormat /dev/sda3cryptsetup open --type luks /dev/sda3 J2R
+
+mkfs.ext4 -L J2RM /dev/mapper/J2R
+mount -L "J2RM" /dev/mapper/
+
+mkfs.ext4 -L root /dev/sda1
+mount -L "root" /mnt
+mkdir /mnt/home
+
+mkfs.ext4 -L home /dev/sda2
+mount -L "home" /mnt/home
+mkdir /mnt/etc
+
+herd start cow-store /mnt
+
+cp /etc/configuration/desktop.scm /mnt/etc/config.scm
+nano /mnt/etc/config.scm
+
+(use-modules (gnu) (gnu system nss) (gnu packages display-managers))
+(use-service-modules desktop networking)
+(use-package-modules xfce gnome certs)
+
+(operating-system  
+  (bootloader (grub-configuration (target "/dev/sda")
+                                  (theme (grub-theme))))
+
+  (file-systems (cons* (file-system
+                        (device "root")
+                        (mount-point "/")
+                        (type "ext4"))
+                       (file-system 
+                        (device "home")
+                        (mount-point "/home")
+                        (type "ext4"))
+                      %base-file-systems)))
+
+(host-name "j2rm")
+(timezone "America/Caracas")
+(locale "es_VE.UTF-8")
+
+(users (cons (user-account                
+                (name "j2rm")
+                (comment "jorge")
+                (group "users")
+                (supplementary-groups '("wheel" "netdev"
+                                        "audio" "video"))
+                (home-directory "/home/j2rm"))))
+
+(packages (cons* xfce
+                 nss-certs
+                 gvfs 
+                 slim  
+                 %base-packages))  
+
+(services (cons* (dhcp-client-service) 
+                %base-services)) 
+
+(services (cons* (xfce-desktop-service)   
+                 %desktop-services))  
+
+(name-service-switch %mdns-host-lookup-nss))
+
+
+
+guix system init /mnt/etc/config.scm /mnt
+
+reboot
